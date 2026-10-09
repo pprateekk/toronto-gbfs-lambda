@@ -44,7 +44,7 @@ s3://<bucket>/
 3. Gzips the raw bytes and uploads them to S3.
 4. Checks the feed's `last_updated` field and logs a warning if the data is more than 10 minutes old, which catches a frozen feed that still returns 200.
 
-## Setup
+## Setup (AWS Console)
  
 Built in the AWS console:
  
@@ -55,6 +55,31 @@ Built in the AWS console:
    - `rate(5 minutes)` with payload `{"feed": "station_status"}`
    - `cron(0 6 * * ? *)`, America/Toronto, with payload `{"feed": "station_information"}`
 5. **CloudWatch Logs:** Lambda automatically creates a log group for the function. The logs show when a feed is collected, where it was saved in S3, the file size, and any errors or stale-feed warnings. These logs can be used to check that the Lambda is running successfully or not. 
+
+
+## Infrastructure as Code - Terraform
+ 
+The `terraform/` folder rebuilds the whole setup as code. I tested it end to end: deployed a separate copy, confirmed files landed in S3 on both schedules and then removed it with `terraform destroy`.
+ 
+### What it creates
+ 
+| Resource | Name | Notes |
+| --- | --- | --- |
+| S3 bucket | `gbfs-tf-toronto` | Block Public Access on |
+| CloudWatch Log Group | `/aws/lambda/gbfs-tf-collector` | Created by Terraform so it has 30-day retention and is removed on destroy |
+| Lambda execution role | `gbfs-tf-lambda-role` | See permissions below |
+| Lambda function | `gbfs-tf-collector` | Same settings as the console version |
+| Scheduler role | `gbfs-tf-scheduler-role` | See permissions below |
+| Schedules | `gbfs-tf-station-status-5min`, `gbfs-tf-station-info-daily` | Both stop at `schedule_end_date` |
+ 
+### Permissions
+ 
+Each role gets only what it needs:
+ 
+- **Lambda role:** `s3:PutObject` on the `raw/` prefix of this bucket and writing to its own log group. Nothing else (least privilege)
+- **Scheduler role:** `lambda:InvokeFunction` on the collector only. The trust policy checks `aws:SourceAccount` so only schedules in my own account can use the role.
+- **No access keys:** Terraform runs with temporary credentials from `aws login`.
+
 
 ## Data source
  
